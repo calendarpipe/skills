@@ -1,0 +1,8 @@
+# Sensitive config (API keys, tokens)
+config.json
+
+# Runtime state
+state.json
+
+# macOS
+.DS_Store

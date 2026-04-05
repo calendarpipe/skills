@@ -14,7 +14,28 @@ When an invitation arrives with a task in its description, don't rely on the nex
 
 ## Prerequisites
 
-Read `<skill-dir>/../calendarpipe/config.json` for `api_token`, `calendar_id`, and `feed_token`. The CalendarPipe CLI lives at `<skill-dir>/../calendarpipe/scripts/calendarpipe.sh`.
+This skill delegates all calendar I/O to the **calendarpipe** skill. Confirm calendarpipe is installed and has been set up (it manages its own API token and hosted calendar). If calendarpipe's config is missing, defer to its first-time setup flow before proceeding here.
+
+## First-Time Setup
+
+Before doing any work, check whether `<skill-dir>/config.json` exists. If it does, read it and verify `trusted_senders` is a non-empty list and `timezone` is set. If it doesn't exist (or is missing fields), walk the user through setup:
+
+1. Ask: *"Which email address(es) should I auto-accept invitations from? I'll only schedule tasks from senders you explicitly trust. You can list more than one — e.g. your personal and work emails."*
+2. Ask for their timezone, suggesting a detected default from `date +%Z` (e.g. `Europe/Prague`, `America/New_York`). The timezone is used when scheduling cron jobs so events fire at the right local time.
+3. Write `<skill-dir>/config.json`:
+
+   ```json
+   {
+     "trusted_senders": ["user@example.com"],
+     "timezone": "Europe/Prague",
+     "cron_model": "sonnet",
+     "cron_session": "isolated"
+   }
+   ```
+
+`cron_model` and `cron_session` have sensible defaults (`sonnet`, `isolated`) — only surface them if the user asks. They control which model runs the scheduled task and whether it runs in an isolated session.
+
+At the start of every invocation (after setup), load `config.json` and use `trusted_senders`, `timezone`, `cron_model`, and `cron_session` from it. Never hardcode these values.
 
 ## State File
 
@@ -42,28 +63,18 @@ Initialize with `{"tasks":{}}` if missing.
 
 ### 1. Check Pending Invitations
 
-```bash
-$CP list-invitations "$TOKEN" "$CAL_ID" pending
-```
+Ask calendarpipe to list pending invitations on the hosted calendar. For each one:
 
-For each pending invitation:
-
-- **From trusted sender** (currently: `jukben@gmail.com`): auto-accept via `$CP respond "$TOKEN" "$CAL_ID" "<event_uid>" ACCEPTED`, then proceed to step 2.
+- **From a trusted sender** (sender email is in `config.trusted_senders`): ask calendarpipe to respond `ACCEPTED` to that invitation, then proceed to step 2.
 - **From anyone else**: notify the user and ask how to respond. Do not schedule anything yet.
 
 ### 1b. Catch Accepted-but-Unscheduled Invitations
 
-The pending filter only shows unresponded invitations. If a previous session accepted an invitation but crashed or failed to schedule the cron, it will be invisible to step 1.
+The pending filter only shows unresponded invitations. If a previous session accepted an invitation but crashed before scheduling the cron, step 1 won't see it.
 
-To recover:
-
-```bash
-$CP list-invitations "$TOKEN" "$CAL_ID"
-```
-
-For each invitation in the response:
+To recover, ask calendarpipe to list **all** invitations (no status filter). For each invitation returned:
 - Check if the `event_uid` already exists in `state.json`.
-- If it does NOT exist in state, and the invitation is from a trusted sender:
+- If it does NOT exist in state, and the sender is in `config.trusted_senders`:
   - It was accepted but never tracked. Proceed to step 2 to schedule a cron (or execute immediately if the event start time has already passed).
 - If it already exists in state → skip (already handled).
 
@@ -77,9 +88,9 @@ After accepting (or recovering an accepted-but-unscheduled task), create a one-s
 openclaw cron add \
   --name "cal-task:<first-8-chars-of-event-uid>" \
   --at "<event_start_iso>" \
-  --tz "Europe/Prague" \
-  --session isolated \
-  --model sonet \
+  --tz "<config.timezone>" \
+  --session <config.cron_session> \
+  --model <config.cron_model> \
   --announce \
   --delete-after-run \
   --json \
@@ -93,7 +104,7 @@ Capture the `id` from JSON output. Save to `state.json` under the event UID.
 For each entry in `state.json` where `status == "scheduled"`:
 
 1. Verify the cron still exists: `openclaw cron list --json` and check for the `cronId`.
-2. Check if the event still exists on the calendar: `$CP list-events "$TOKEN" "$CAL_ID" <range-around-startAt>`.
+2. Ask calendarpipe to list events in a narrow window around `startAt` to confirm the event still exists.
 3. If event was deleted/cancelled but cron exists → `openclaw cron rm <cronId>`, set status to `cancelled`.
 4. If cron is missing but event exists → re-create the cron (step 2).
 5. If both gone → set status to `cancelled` and clean up.

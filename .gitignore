@@ -1,5 +1,6 @@
 # Sensitive config (API keys, tokens)
 config.json
+.env
 
 # Runtime state
 state.json

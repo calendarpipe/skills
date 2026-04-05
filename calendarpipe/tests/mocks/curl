@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Mock curl — writes each argument on its own line to MOCK_CURL_LOG
+# and prints a stub JSON response. Overrides: MOCK_CURL_RESPONSE, MOCK_CURL_EXIT.
+: "${MOCK_CURL_LOG:?MOCK_CURL_LOG not set — did test_helper.setup_mock_curl run?}"
+printf '%s\n' "$@" > "$MOCK_CURL_LOG"
+printf '%s' "${MOCK_CURL_RESPONSE:-{\"ok\":true\}}"
+exit "${MOCK_CURL_EXIT:-0}"

@@ -1,60 +1,55 @@
 #!/usr/bin/env bats
-# JSON request bodies for write operations.
+# A body is sent only when one is supplied, and always with a JSON content type.
 
 load ../test_helper
 
-setup() { setup_mock_curl; }
-teardown() { teardown_mock_curl; }
-
-@test "create-event forwards event_json verbatim" {
-  local body='{"title":"Standup","start":{"dateTime":"2026-03-25T10:00:00Z"}}'
-  run "$SCRIPT" create-event "$TOKEN" "hosted:abc" "$body"
+@test "POST sends the body verbatim" {
+  run "$SCRIPT" POST /hosted-calendars '{"name":"Work","timezone":"Europe/Prague"}'
   [ "$status" -eq 0 ]
-  [ "$(curl_body)" = "$body" ]
+  [ "$(curl_body)" = '{"name":"Work","timezone":"Europe/Prague"}' ]
 }
 
-@test "update-event forwards update_json verbatim" {
-  local body='{"title":"Renamed"}'
-  run "$SCRIPT" update-event "$TOKEN" "evt-1" "$body"
+@test "POST with a body sets Content-Type: application/json" {
+  run "$SCRIPT" POST /hosted-calendars '{"name":"Work"}'
   [ "$status" -eq 0 ]
-  [ "$(curl_body)" = "$body" ]
+  [ "$(curl_header "Content-Type:")" = "Content-Type: application/json" ]
 }
 
-@test "respond body is {\"status\": \"<value>\"}" {
-  run "$SCRIPT" respond "$TOKEN" "cal-1" "uid-1" "ACCEPTED"
+@test "PATCH sends the body verbatim" {
+  run "$SCRIPT" PATCH /events/evt-1 '{"title":"Renamed"}'
   [ "$status" -eq 0 ]
-  [ "$(curl_body)" = '{"status": "ACCEPTED"}' ]
+  [ "$(curl_body)" = '{"title":"Renamed"}' ]
 }
 
-@test "respond DECLINED sets correct status in body" {
-  run "$SCRIPT" respond "$TOKEN" "cal-1" "uid-1" "DECLINED"
+@test "a body containing quotes and unicode survives intact" {
+  run "$SCRIPT" POST /hosted-calendars '{"name":"Ann’s \"Work\" — cal"}'
   [ "$status" -eq 0 ]
-  [ "$(curl_body)" = '{"status": "DECLINED"}' ]
+  [ "$(curl_body)" = '{"name":"Ann’s \"Work\" — cal"}' ]
 }
 
-@test "create-calendar name only uses default timezone UTC, no organizer key" {
-  run "$SCRIPT" create-calendar "$TOKEN" "My Cal"
+@test "a bodyless POST sends neither -d nor Content-Type" {
+  run "$SCRIPT" POST '/calendars/{hosted:abc}/events/evt-1/cancel'
   [ "$status" -eq 0 ]
-  local body; body="$(curl_body)"
-  [[ "$body" == *'"name": "My Cal"'* ]]
-  [[ "$body" == *'"timezone": "UTC"'* ]]
-  [[ "$body" != *"organizerDisplayName"* ]]
+  [ -z "$(curl_body)" ]
+  [ -z "$(curl_header "Content-Type:")" ]
 }
 
-@test "create-calendar with timezone overrides default" {
-  run "$SCRIPT" create-calendar "$TOKEN" "My Cal" "America/New_York"
+@test "GET sends no body" {
+  run "$SCRIPT" GET /hosted-calendars
   [ "$status" -eq 0 ]
-  [[ "$(curl_body)" == *'"timezone": "America/New_York"'* ]]
+  [ -z "$(curl_body)" ]
 }
 
-@test "create-calendar with organizer includes organizerDisplayName" {
-  run "$SCRIPT" create-calendar "$TOKEN" "My Cal" "UTC" "Alice Smith"
-  [ "$status" -eq 0 ]
-  [[ "$(curl_body)" == *'"organizerDisplayName": "Alice Smith"'* ]]
+# curl turns -d without -X into a POST, so a body on a read would create the very
+# resource the caller meant to list.
+@test "GET with a body is refused, not silently sent as POST" {
+  run "$SCRIPT" GET /sync-rules '{"name":"x"}'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"takes no request body"* ]]
 }
 
-@test "write operations send Content-Type: application/json" {
-  run "$SCRIPT" create-event "$TOKEN" "hosted:abc" '{}'
-  [ "$status" -eq 0 ]
-  [[ "$(curl_header "Content-Type:")" == "Content-Type: application/json" ]]
+@test "DELETE with a body is refused" {
+  run "$SCRIPT" DELETE /events/evt-1 '{"force":true}'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"takes no request body"* ]]
 }

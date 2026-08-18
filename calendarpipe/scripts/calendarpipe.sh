@@ -1,38 +1,126 @@
 #!/usr/bin/env bash
-# CalendarPipe CLI helper — run `calendarpipe.sh help` for usage.
+# CalendarPipe transport wrapper — auth, base URL, encoding, errors. Nothing else.
+#
+# It deliberately knows no endpoints: the operation list lives in
+# references/endpoints.md, generated from the API's own OpenAPI spec. Adding an
+# endpoint upstream must never require editing this file.
 
 set -euo pipefail
 
-BASE_URL="https://www.calendarpipe.com"
+# Percent-encoding is defined over bytes. Without this, bash walks a UTF-8 string
+# by codepoint and `é` encodes as %E9 instead of %C3%A9, which the API rejects.
+export LC_ALL=C
+
+BASE_URL="${CALENDARPIPE_BASE_URL:-https://www.calendarpipe.com}"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/calendarpipe"
+CONFIG_FILE="${CONFIG_DIR}/config.json"
+SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 print_help() {
   cat <<'EOF'
-CalendarPipe CLI helper
+CalendarPipe transport wrapper
 
 Usage:
-  calendarpipe.sh <command> <token> [args...]
+  calendarpipe.sh <METHOD> <path> [json-body]
 
-Commands:
-  list-events        <token> <calendar_id> [start_iso] [end_iso]
-  list-all-events    <token> [start_iso] [end_iso] [calendarIds]
-  create-event       <token> <calendar_id> <event_json>
-  update-event       <token> <event_id> <update_json>
-  delete-event       <token> <event_id>
-  cancel-event       <token> <cal_id> <event_id>
-  list-invitations   <token> <cal_id> [status]
-  respond            <token> <cal_id> <event_uid> <ACCEPTED|DECLINED|TENTATIVE>
-  list-calendars     <token>
-  list-all-calendars <token>
-  create-calendar    <token> <name> [timezone] [organizerDisplayName]
-  delete-calendar    <token> <hosted_calendar_uuid>
-  resend-invite      <token> <cal_id> <event_id>
-  help               Show this message
+  METHOD    GET | POST | PATCH | PUT | DELETE
+  path      Starts with '/'. The '/api/v1' prefix is added when absent.
+  body      JSON string, for POST/PATCH/PUT.
 
-Calendar ID formats:
-  hosted:<uuid>                       — Hosted calendar
-  <accountUUID>:<providerCalendarId>  — External sub-calendar (e.g. Google Family)
-  <accountUUID>                       — External primary calendar (backward compat)
+Encoding:
+  Anything inside {braces} is URL-encoded as a single path segment. Use it for
+  every composite calendar ID — they contain ':' and Apple CalDAV IDs contain
+  '/' as well, both of which corrupt the URL if passed raw.
+
+Examples:
+  calendarpipe.sh GET  /hosted-calendars
+  calendarpipe.sh GET  '/calendars/{hosted:abc-123}/events?limit=100'
+  calendarpipe.sh POST /sync-rules '{"name":"Work → Personal","source":"...","target":"..."}'
+  calendarpipe.sh POST '/hosted-calendars/{cal-1}/invitations/{uid-1}/respond' '{"status":"ACCEPTED"}'
+
+Authentication (first match wins):
+  1. $CALENDARPIPE_API_KEY
+  2. api_token in ~/.config/calendarpipe/config.json
+
+Discovering endpoints:
+  references/endpoints.md          — every operation, one line each
+  curl -s "$BASE_URL/api/v1/openapi.json" | jq '.paths["<path>"]'
 EOF
+}
+
+die() {
+  echo "calendarpipe: $1" >&2
+  exit "${2:-1}"
+}
+
+# Percent-encode every byte that is not an unreserved URL character.
+urlencode() {
+  local string="$1" out="" char code i
+  for ((i = 0; i < ${#string}; i++)); do
+    char="${string:i:1}"
+    case "$char" in
+      [a-zA-Z0-9.~_-]) out+="$char" ;;
+      *)
+        # Bytes above 0x7F arrive sign-extended; mask back to the raw octet.
+        printf -v code '%d' "'$char"
+        out+="$(printf '%%%02X' "$((code & 0xFF))")"
+        ;;
+    esac
+  done
+  printf '%s' "$out"
+}
+
+# Counting braces is not enough: `}a{b` balances but would encode nothing and
+# duplicate the tail, so walk the string and reject anything but flat pairs.
+validate_braces() {
+  local raw="$1" char depth=0 i
+  for ((i = 0; i < ${#raw}; i++)); do
+    char="${raw:i:1}"
+    case "$char" in
+      "{")
+        depth=$((depth + 1))
+        [ "$depth" -le 1 ] || die "nested braces in path: $raw"
+        ;;
+      "}")
+        depth=$((depth - 1))
+        [ "$depth" -ge 0 ] || die "closing brace before opening brace in path: $raw"
+        ;;
+    esac
+  done
+  [ "$depth" -eq 0 ] || die "unbalanced braces in path: $raw"
+}
+
+# Encode each {braced} group, pass everything else through untouched.
+encode_braced() {
+  local raw="$1" out="" rest="$1" before inside
+  validate_braces "$raw"
+
+  while [[ "$rest" == *"{"* ]]; do
+    before="${rest%%\{*}"
+    rest="${rest#*\{}"
+    inside="${rest%%\}*}"
+    rest="${rest#*\}}"
+    out+="${before}$(urlencode "$inside")"
+  done
+  printf '%s%s' "$out" "$rest"
+}
+
+# Config used to live in the skill directory, where `skills update` can destroy
+# it. Runs on every invocation because the setup prose an agent may never read is
+# the wrong place to move a live credential. Never clobbers a good config.
+migrate_legacy_config() {
+  local legacy="${SKILL_DIR}/config.json"
+  [ -f "$legacy" ] || return 0
+
+  if [ -f "$CONFIG_FILE" ]; then
+    echo "calendarpipe: ignoring stale ${legacy}; ${CONFIG_FILE} already exists" >&2
+    return 0
+  fi
+
+  mkdir -p "$CONFIG_DIR"
+  mv "$legacy" "$CONFIG_FILE"
+  chmod 600 "$CONFIG_FILE"
+  echo "calendarpipe: moved ${legacy} to ${CONFIG_FILE}" >&2
 }
 
 if [ $# -eq 0 ]; then
@@ -40,128 +128,83 @@ if [ $# -eq 0 ]; then
   exit 0
 fi
 
-cmd="$1"
-shift
-
-case "$cmd" in
-
-  help|--help|-h)
+case "$1" in
+  help | --help | -h)
     print_help
     exit 0
     ;;
-
-  list-events)
-    token="$1" cal_id="$2" start="${3:-}" end="${4:-}"
-    # cal_id is a composite ID — pass it directly (URL-encoded)
-    encoded_cal_id=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${cal_id}', safe=''))")
-    url="${BASE_URL}/api/v1/calendars/${encoded_cal_id}/events?limit=100"
-    [ -n "$start" ] && url="${url}&start=${start}"
-    [ -n "$end" ] && url="${url}&end=${end}"
-    curl -s -H "Authorization: Bearer ${token}" "${url}"
-    ;;
-
-  list-all-events)
-    token="$1" start="${2:-}" end="${3:-}" calendar_ids="${4:-}"
-    url="${BASE_URL}/api/v1/events?limit=100"
-    [ -n "$start" ] && url="${url}&start=${start}"
-    [ -n "$end" ] && url="${url}&end=${end}"
-    [ -n "$calendar_ids" ] && url="${url}&calendarIds=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${calendar_ids}', safe=''))")"
-    curl -s -H "Authorization: Bearer ${token}" "${url}"
-    ;;
-
-  create-event)
-    token="$1" cal_id="$2" event_json="$3"
-    # cal_id is a composite ID — pass it directly (URL-encoded)
-    encoded_cal_id=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${cal_id}', safe=''))")
-    curl -s -X POST \
-      -H "Authorization: Bearer ${token}" \
-      -H "Content-Type: application/json" \
-      -d "${event_json}" \
-      "${BASE_URL}/api/v1/calendars/${encoded_cal_id}/events"
-    ;;
-
-  update-event)
-    token="$1" event_id="$2" update_json="$3"
-    curl -s -X PATCH \
-      -H "Authorization: Bearer ${token}" \
-      -H "Content-Type: application/json" \
-      -d "${update_json}" \
-      "${BASE_URL}/api/v1/events/${event_id}"
-    ;;
-
-  delete-event)
-    token="$1" event_id="$2"
-    curl -s -X DELETE \
-      -H "Authorization: Bearer ${token}" \
-      "${BASE_URL}/api/v1/events/${event_id}"
-    ;;
-
-  cancel-event)
-    token="$1" cal_id="$2" event_id="$3"
-    encoded_cal_id=$(python3 -c "import urllib.parse; print(urllib.parse.quote('hosted:${cal_id}', safe=''))")
-    curl -s -X POST \
-      -H "Authorization: Bearer ${token}" \
-      "${BASE_URL}/api/v1/calendars/${encoded_cal_id}/events/${event_id}/cancel"
-    ;;
-
-  list-invitations)
-    token="$1" cal_id="$2" status="${3:-}"
-    url="${BASE_URL}/api/v1/hosted-calendars/${cal_id}/invitations"
-    [ -n "$status" ] && url="${url}?status=${status}"
-    curl -s -H "Authorization: Bearer ${token}" "${url}"
-    ;;
-
-  respond)
-    token="$1" cal_id="$2" event_uid="$3" rsvp_status="$4"
-    curl -s -X POST \
-      -H "Authorization: Bearer ${token}" \
-      -H "Content-Type: application/json" \
-      -d "{\"status\": \"${rsvp_status}\"}" \
-      "${BASE_URL}/api/v1/hosted-calendars/${cal_id}/invitations/${event_uid}/respond"
-    ;;
-
-  list-calendars)
-    token="$1"
-    curl -s -H "Authorization: Bearer ${token}" \
-      "${BASE_URL}/api/v1/hosted-calendars"
-    ;;
-
-  list-all-calendars)
-    token="$1"
-    curl -s -H "Authorization: Bearer ${token}" \
-      "${BASE_URL}/api/v1/calendars"
-    ;;
-
-  create-calendar)
-    token="$1" name="$2" timezone="${3:-UTC}" organizer="${4:-}"
-    body="{\"name\": \"${name}\", \"timezone\": \"${timezone}\""
-    [ -n "$organizer" ] && body="${body}, \"organizerDisplayName\": \"${organizer}\""
-    body="${body}}"
-    curl -s -X POST \
-      -H "Authorization: Bearer ${token}" \
-      -H "Content-Type: application/json" \
-      -d "${body}" \
-      "${BASE_URL}/api/v1/hosted-calendars"
-    ;;
-
-  delete-calendar)
-    token="$1" cal_uuid="$2"
-    curl -s -X DELETE \
-      -H "Authorization: Bearer ${token}" \
-      "${BASE_URL}/api/v1/hosted-calendars/${cal_uuid}"
-    ;;
-
-  resend-invite)
-    token="$1" cal_id="$2" event_id="$3"
-    encoded_cal_id=$(python3 -c "import urllib.parse; print(urllib.parse.quote('hosted:${cal_id}', safe=''))")
-    curl -s -X POST \
-      -H "Authorization: Bearer ${token}" \
-      "${BASE_URL}/api/v1/calendars/${encoded_cal_id}/events/${event_id}/invite"
-    ;;
-
-  *)
-    echo "Unknown command: $cmd" >&2
-    echo "Run 'calendarpipe.sh help' for usage." >&2
-    exit 1
-    ;;
 esac
+
+[ $# -ge 2 ] || die "usage: calendarpipe.sh <METHOD> <path> [json-body]"
+
+method="$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
+path="$2"
+body="${3:-}"
+
+case "$method" in
+  GET | POST | PATCH | PUT | DELETE) ;;
+  *) die "unsupported method: $method" ;;
+esac
+
+# curl infers POST from -d when no -X is given, so a body on a GET would turn a
+# read into a write. Refuse rather than silently sending something else.
+if [ -n "${3:-}" ] && { [ "$method" = "GET" ] || [ "$method" = "DELETE" ]; }; then
+  die "$method takes no request body"
+fi
+
+[[ "$path" == /* ]] || die "path must start with '/': $path"
+[[ "$path" == /api/v1/* ]] || path="/api/v1${path}"
+
+migrate_legacy_config
+
+token="${CALENDARPIPE_API_KEY:-}"
+if [ -z "$token" ]; then
+  [ -f "$CONFIG_FILE" ] \
+    || die "no API key. Set \$CALENDARPIPE_API_KEY or add api_token to ${CONFIG_FILE}" 2
+  command -v jq >/dev/null 2>&1 \
+    || die "jq is required to read ${CONFIG_FILE}. Install jq, or set \$CALENDARPIPE_API_KEY."
+  token="$(jq -re '.api_token // empty' "$CONFIG_FILE" 2>/dev/null)" \
+    || die "no api_token in ${CONFIG_FILE}. Set \$CALENDARPIPE_API_KEY or add one." 2
+fi
+
+url="${BASE_URL}$(encode_braced "$path")"
+
+args=(-sS)
+[ "$method" = "GET" ] || args+=(-X "$method")
+# The token goes in argv of curl, never of this script — a key passed as a
+# script argument lands in the caller's shell history and in `ps` output.
+args+=(-H "Authorization: Bearer ${token}")
+if [ -n "$body" ]; then
+  args+=(-H "Content-Type: application/json" -d "$body")
+fi
+# Trailing status line, split back off below. Keep the URL last — the test
+# harness reads it as the final argument.
+args+=(-w $'\n%{http_code}')
+args+=("$url")
+
+response="$(curl "${args[@]}")"
+
+# `set -e` aborts above if curl itself failed, so a zero exit always carries the
+# `-w` status as the final line.
+status="${response##*$'\n'}"
+body_out="${response%$'\n'*}"
+[[ "$status" =~ ^[0-9]{3}$ ]] || die "malformed response from curl: no status line"
+
+# `[ -n "$x" ] && printf ...` would make an empty body (a 204) the script's exit
+# status under `set -e`.
+if [ -n "$body_out" ]; then
+  printf '%s\n' "$body_out"
+fi
+
+if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+  case "$status" in
+    3??) echo "calendarpipe: HTTP ${status} — unexpected redirect. Check \$CALENDARPIPE_BASE_URL." >&2 ;;
+    401) echo "calendarpipe: 401 — API key missing or invalid." >&2 ;;
+    402) echo "calendarpipe: 402 — Pro plan required. The human must upgrade in the dashboard." >&2 ;;
+    404) echo "calendarpipe: 404 — not found, or not owned by this API key." >&2 ;;
+    *) echo "calendarpipe: HTTP ${status}" >&2 ;;
+  esac
+  exit 1
+fi
+
+exit 0

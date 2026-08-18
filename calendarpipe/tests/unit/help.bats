@@ -1,48 +1,38 @@
 #!/usr/bin/env bats
+# Help is what an agent reads before its first call, so it must show the call
+# shape, the brace-encoding rule, and where the endpoint list lives.
 
 load ../test_helper
-
-setup() { setup_mock_curl; }
-teardown() { teardown_mock_curl; }
-
-@test "help prints usage and exits 0" {
-  run "$SCRIPT" help
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"CalendarPipe CLI helper"* ]]
-  [[ "$output" == *"Usage:"* ]]
-}
-
-@test "--help flag works" {
-  run "$SCRIPT" --help
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"Usage:"* ]]
-}
-
-@test "-h flag works" {
-  run "$SCRIPT" -h
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"Usage:"* ]]
-}
 
 @test "no arguments prints help and exits 0" {
   run "$SCRIPT"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Usage:"* ]]
+  [[ "$output" == *"<METHOD> <path>"* ]]
 }
 
-@test "unknown command exits 1 and points to help" {
-  run "$SCRIPT" totally-bogus-cmd
-  [ "$status" -eq 1 ]
-  [[ "$output" == *"Unknown command: totally-bogus-cmd"* ]]
-  [[ "$output" == *"help"* ]]
+@test "help, --help and -h all work" {
+  for flag in help --help -h; do
+    run "$SCRIPT" "$flag"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"CalendarPipe transport wrapper"* ]]
+  done
 }
 
-@test "help lists every command in the dispatch table" {
+@test "help documents the brace-encoding rule" {
   run "$SCRIPT" help
   [ "$status" -eq 0 ]
-  for cmd in list-events list-all-events create-event update-event delete-event \
-             cancel-event list-invitations respond list-calendars list-all-calendars \
-             create-calendar delete-calendar resend-invite; do
-    [[ "$output" == *"$cmd"* ]] || { echo "missing command: $cmd"; return 1; }
-  done
+  [[ "$output" == *"{braces}"* ]]
+}
+
+@test "help points at the generated endpoint list" {
+  run "$SCRIPT" help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"references/endpoints.md"* ]]
+}
+
+@test "help names both key sources" {
+  run "$SCRIPT" help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"CALENDARPIPE_API_KEY"* ]]
+  [[ "$output" == *"config.json"* ]]
 }

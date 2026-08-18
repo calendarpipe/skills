@@ -14,15 +14,24 @@ When an invitation arrives with a task in its description, don't rely on the nex
 
 ## Prerequisites
 
-This skill delegates all calendar I/O to the **calendarpipe** skill. Confirm calendarpipe is installed and has been set up (it manages its own API token and hosted calendar). If calendarpipe's config is missing, defer to its first-time setup flow before proceeding here.
+This skill delegates all calendar I/O to the **calendarpipe** skill. Confirm calendarpipe is installed and has been set up (it manages the API token and hosted calendar in `~/.config/calendarpipe/config.json`). If that config is missing, defer to its first-time setup flow before proceeding here.
 
 ## First-Time Setup
 
-Before doing any work, check whether `<skill-dir>/config.json` exists. If it does, read it and verify `trusted_senders` is a non-empty list and `timezone` is set. If it doesn't exist (or is missing fields), walk the user through setup:
+Configuration and state live at `~/.config/calendarpipe/agent-calendar/` (honouring
+`$XDG_CONFIG_HOME`), outside the skill directory — updating or reinstalling the skill would
+otherwise destroy the scheduled-task state below.
 
-1. Ask: *"Which email address(es) should I auto-accept invitations from? I'll only schedule tasks from senders you explicitly trust. You can list more than one — e.g. your personal and work emails."*
+**Migrating an older install:** if `<skill-dir>/config.json` or `<skill-dir>/state.json`
+exists, move each one to the new directory and tell the user what moved. If a file of that
+name is already there, leave the old one alone and say so — never overwrite a live config or
+a state file tracking scheduled crons.
+
+Before doing any work, check whether `~/.config/calendarpipe/agent-calendar/config.json` exists. If it does, read it and verify `trusted_senders` is a non-empty list and `timezone` is set. If it doesn't exist (or is missing fields), walk the user through setup:
+
+1. Ask: _"Which email address(es) should I auto-accept invitations from? I'll only schedule tasks from senders you explicitly trust. You can list more than one — e.g. your personal and work emails."_
 2. Ask for their timezone, suggesting a detected default from `date +%Z` (e.g. `Europe/Prague`, `America/New_York`). The timezone is used when scheduling cron jobs so events fire at the right local time.
-3. Write `<skill-dir>/config.json`:
+3. Write `~/.config/calendarpipe/agent-calendar/config.json`:
 
    ```json
    {
@@ -39,7 +48,7 @@ At the start of every invocation (after setup), load `config.json` and use `trus
 
 ## State File
 
-`<skill-dir>/state.json` tracks everything:
+`~/.config/calendarpipe/agent-calendar/state.json` tracks everything:
 
 ```json
 {
@@ -73,6 +82,7 @@ Ask calendarpipe to list pending invitations on the hosted calendar. For each on
 The pending filter only shows unresponded invitations. If a previous session accepted an invitation but crashed before scheduling the cron, step 1 won't see it.
 
 To recover, ask calendarpipe to list **all** invitations (no status filter). For each invitation returned:
+
 - Check if the `event_uid` already exists in `state.json`.
 - If it does NOT exist in state, and the sender is in `config.trusted_senders`:
   - It was accepted but never tracked. Proceed to step 2 to schedule a cron (or execute immediately if the event start time has already passed).
@@ -114,6 +124,7 @@ Also clean up entries with `status == "executed"` or `status == "cancelled"` old
 ### 4. Report
 
 After processing, report a brief summary:
+
 - New tasks accepted and scheduled (with cron time)
 - Any reconciliation actions taken
 - Any invitations needing user input

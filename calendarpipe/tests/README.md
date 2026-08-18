@@ -2,10 +2,12 @@
 
 Two tiers:
 
-- **unit/** — offline, fast, no API token needed. Mocks `curl` and asserts on
-  URL construction, HTTP methods, headers, and request bodies. 53 tests.
-- **integration/** — opt-in, hits the real CalendarPipe API. Requires a token
-  in `.env`. See `integration/README.md`.
+- **unit/** — offline and fast. Mocks `curl` and asserts on URL construction, encoding,
+  methods, headers, bodies and exit codes. No token or network needed.
+- **integration/** — opt-in, hits the real API with a **Pro** key in
+  `$CALENDARPIPE_API_KEY` (sync-rule endpoints answer 402 on free). Without the key its
+  tests skip rather than fail. Point them at a local API with
+  `CALENDARPIPE_BASE_URL=http://localhost:3000`.
 
 ## Install bats-core
 
@@ -13,65 +15,56 @@ Two tiers:
 brew install bats-core
 ```
 
-## Run unit tests
+## Run
 
 ```bash
 cd calendarpipe/tests
-./run.sh                 # default — unit only, no env or network needed
+./run.sh                 # unit only
+./run.sh --integration   # also hits the real API
 ```
 
-Or directly with bats:
-
-```bash
-bats calendarpipe/tests/unit              # whole suite
-bats calendarpipe/tests/unit/help.bats    # a single file
-```
-
-## Run unit + integration
-
-```bash
-cd calendarpipe/tests
-./run.sh --integration   # also hits the real API (requires .env)
-```
+Or directly: `bats unit`, or `bats unit/help.bats` for one file.
 
 ## How the unit tests work
 
-The mock at `tests/mocks/curl` is prepended to `$PATH` during test setup. It
-records every argument passed to `curl` (one per line) to a temp file, then
-prints a stub JSON response. Tests then inspect the log via helpers in
-`test_helper.bash`:
+The mock at `tests/mocks/curl` is prepended to `$PATH` during setup. It records every argument
+passed to `curl` — one per line — then prints a stub response. Tests inspect that log through
+helpers in `test_helper.bash`:
 
-| Helper | Returns |
-|---|---|
-| `curl_url` | The URL (last arg) |
-| `curl_method` | Value after `-X`, or `"GET"` |
-| `curl_body` | Value after `-d` |
+| Helper                  | Returns                                    |
+| ----------------------- | ------------------------------------------ |
+| `curl_url`              | The URL (always the last argument)         |
+| `curl_method`           | Value after `-X`, or `"GET"`               |
+| `curl_body`             | Value after `-d`                           |
 | `curl_header "Prefix:"` | First `-H` value starting with that prefix |
-| `curl_log` | Full argv, one per line |
+| `curl_log`              | Full argv, one per line                    |
 
-## Adding a new test case
+`test_helper.bash` defines `setup`/`teardown` itself, so mocking is **opt-out**, not opt-in —
+a new unit file that forgot them would otherwise run against real curl with the developer's
+real token. It also exports `$CALENDARPIPE_API_KEY` and points `$XDG_CONFIG_HOME` at an empty
+temp directory. Integration tests override both to reach the network.
 
-1. Pick the right file (or create one under `unit/`)
-2. Start with `load ../test_helper` and `setup()` / `teardown()` calling
-   `setup_mock_curl` / `teardown_mock_curl`
-3. Call the script via `run "$SCRIPT" <cmd> "$TOKEN" ...`
-4. Assert on `$status`, `$output`, and the curl log helpers
+Stub the response with `MOCK_CURL_RESPONSE`. The wrapper reads the HTTP status from a trailing
+line, so an error case looks like:
 
-Example:
+```bash
+export MOCK_CURL_RESPONSE='{"error":"Validation failed"}
+400'
+```
+
+## Adding a test
 
 ```bash
 @test "my new case" {
-  run "$SCRIPT" list-events "$TOKEN" "hosted:abc"
+  run "$SCRIPT" GET '/calendars/{hosted:abc}/events'
   [ "$status" -eq 0 ]
-  [[ "$(curl_url)" == *"expected-substring"* ]]
+  [[ "$(curl_url)" == *"hosted%3Aabc"* ]]
 }
 ```
 
 ## What's not covered
 
-- Invitation flows (`respond`, `list-invitations` on live data) — requires a
-  human to email-invite the hosted calendar. Manual QA only.
-- `cancel-event` / `resend-invite` integration — sends real emails to
-  attendees. Test manually with yourself as attendee.
-- External-calendar endpoints (`list-all-events`, `list-all-calendars`)
-  depend on connected Google/Microsoft/Apple accounts. Verify manually.
+Anything that sends real email stays manual, because there is no way to assert on it without
+a human reading an inbox: inbound invitations (someone must email-invite the hosted calendar),
+cancellations, and re-invites. Test those with yourself as the attendee. External-calendar
+endpoints likewise need a connected Google/Microsoft/Apple account.

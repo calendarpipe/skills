@@ -1,70 +1,23 @@
 #!/usr/bin/env bats
-# Optional args must be appended as query params only when provided.
+# Query strings are the caller's to compose; braces work there too, so values
+# containing ':' or ',' can be encoded without encoding the separators.
 
 load ../test_helper
 
-setup() { setup_mock_curl; }
-teardown() { teardown_mock_curl; }
-
-# --- list-events ---
-
-@test "list-events without start/end has only limit param" {
-  run "$SCRIPT" list-events "$TOKEN" "hosted:abc"
+@test "passes a query string through unchanged" {
+  run "$SCRIPT" GET '/calendars/{hosted:abc}/events?limit=100&start=2026-03-01T00:00:00Z'
   [ "$status" -eq 0 ]
-  local url; url="$(curl_url)"
-  [[ "$url" == *"?limit=100"* ]]
-  [[ "$url" != *"&start="* ]]
-  [[ "$url" != *"&end="* ]]
+  [[ "$(curl_url)" == *"?limit=100&start=2026-03-01T00:00:00Z" ]]
 }
 
-@test "list-events with start+end appends both" {
-  run "$SCRIPT" list-events "$TOKEN" "hosted:abc" "2026-01-01T00:00:00Z" "2026-01-31T23:59:59Z"
+@test "encodes a braced query value without touching = or &" {
+  run "$SCRIPT" GET '/events?calendarIds={hosted:a,hosted:b}&limit=50'
   [ "$status" -eq 0 ]
-  local url; url="$(curl_url)"
-  [[ "$url" == *"&start=2026-01-01T00:00:00Z"* ]]
-  [[ "$url" == *"&end=2026-01-31T23:59:59Z"* ]]
+  [[ "$(curl_url)" == *"calendarIds=hosted%3Aa%2Chosted%3Ab&limit=50" ]]
 }
 
-@test "list-events with only start (no end) appends just start" {
-  run "$SCRIPT" list-events "$TOKEN" "hosted:abc" "2026-01-01T00:00:00Z"
+@test "honours CALENDARPIPE_BASE_URL for local development" {
+  CALENDARPIPE_BASE_URL="http://localhost:3000" run "$SCRIPT" GET /hosted-calendars
   [ "$status" -eq 0 ]
-  local url; url="$(curl_url)"
-  [[ "$url" == *"&start=2026-01-01T00:00:00Z"* ]]
-  [[ "$url" != *"&end="* ]]
-}
-
-# --- list-all-events ---
-
-@test "list-all-events with calendarIds URL-encodes comma-separated list" {
-  run "$SCRIPT" list-all-events "$TOKEN" "" "" "hosted:abc,acc:prov/sub"
-  [ "$status" -eq 0 ]
-  local url; url="$(curl_url)"
-  # comma → %2C, colon → %3A, slash → %2F
-  [[ "$url" == *"calendarIds=hosted%3Aabc%2Cacc%3Aprov%2Fsub"* ]]
-}
-
-@test "list-all-events with no filters hits base events endpoint" {
-  run "$SCRIPT" list-all-events "$TOKEN"
-  [ "$status" -eq 0 ]
-  local url; url="$(curl_url)"
-  [[ "$url" == *"/api/v1/events?limit=100"* ]]
-  [[ "$url" != *"&start="* ]]
-  [[ "$url" != *"&end="* ]]
-  [[ "$url" != *"&calendarIds="* ]]
-}
-
-# --- list-invitations ---
-
-@test "list-invitations without status has no query string" {
-  run "$SCRIPT" list-invitations "$TOKEN" "cal-123"
-  [ "$status" -eq 0 ]
-  local url; url="$(curl_url)"
-  [[ "$url" == *"/hosted-calendars/cal-123/invitations" ]]
-  [[ "$url" != *"?"* ]]
-}
-
-@test "list-invitations with status appends ?status=" {
-  run "$SCRIPT" list-invitations "$TOKEN" "cal-123" "pending"
-  [ "$status" -eq 0 ]
-  [[ "$(curl_url)" == *"/invitations?status=pending" ]]
+  [ "$(curl_url)" = "http://localhost:3000/api/v1/hosted-calendars" ]
 }

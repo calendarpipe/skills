@@ -9,10 +9,7 @@ if ! command -v bats >/dev/null 2>&1; then
   exit 1
 fi
 
-if [ "${1:-}" = "--integration" ] || [ "${1:-}" = "-i" ]; then
-  bats unit integration
-elif [ "${1:-}" = "--all" ]; then
-  bats unit integration
-else
-  bats unit
-fi
+case "${1:-}" in
+  --integration | -i | --all) bats unit integration ;;
+  *) bats unit ;;
+esac

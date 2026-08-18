@@ -1,53 +1,69 @@
-# Skills
+# CalendarPipe Skills
 
-A collection of [Agent Skills](https://agentskills.io) for calendar-driven automation. These skills give AI agents the ability to manage a hosted calendar and execute tasks on a schedule — turning calendar invitations into real actions.
+[Agent Skills](https://agentskills.io) that let AI agents run a calendar — manage events,
+send and answer invitations, sync one calendar into another, and execute tasks on a schedule.
+
+> **This repository is a read-only mirror.** It is generated from the CalendarPipe product
+> repository on every release. Pull requests here cannot be merged — please
+> [open an issue](https://github.com/calendarpipe/skills/issues) instead and we will land the
+> change upstream.
 
 ## What's inside
 
 ### calendarpipe
 
-Manage a hosted [CalendarPipe](https://www.calendarpipe.com) calendar — create events, send invitations, RSVP to inbound invites, check schedules, and poll for updates. Includes a helper script for common API operations and a full API reference.
+Operate CalendarPipe through its REST API: hosted calendars, events, invitations and RSVPs,
+and sync rules with their gate functions. Ships a transport wrapper for authenticated calls
+and an endpoint index generated from the API's own OpenAPI spec.
 
 ### agent-calendar
 
-Turn calendar invitations into scheduled cron jobs. When an invitation arrives with a task in its description, the skill accepts it and schedules a one-shot cron at the event's start time. Handles reconciliation (re-creating missing crons, cleaning up cancelled events) and crash recovery.
+Turns calendar invitations into scheduled work. When an invitation arrives carrying a task in
+its description, the skill accepts it and schedules a one-shot cron at the event's start time,
+reconciling on restart. Depends on `calendarpipe` for API access.
 
-Depends on `calendarpipe` for API access and config.
+## Install
 
-## Installation
-
-Clone this repo and symlink (or copy) the skill directories into your agent's skills folder.
-
-### Claude Code
-
-```bash
-# Project-level (this project only)
-mkdir -p .claude/skills
-ln -s /path/to/skills/calendarpipe .claude/skills/calendarpipe
-ln -s /path/to/skills/agent-calendar .claude/skills/agent-calendar
-
-# User-level (all projects)
-mkdir -p ~/.claude/skills
-ln -s /path/to/skills/calendarpipe ~/.claude/skills/calendarpipe
-ln -s /path/to/skills/agent-calendar ~/.claude/skills/agent-calendar
-```
-
-### VS Code (GitHub Copilot) / Cross-client
+With the [`skills` CLI](https://github.com/vercel-labs/skills), which works with Claude Code,
+Cursor, Copilot, Codex and 40+ other agents:
 
 ```bash
-# Project-level
-mkdir -p .agents/skills
-ln -s /path/to/skills/calendarpipe .agents/skills/calendarpipe
-ln -s /path/to/skills/agent-calendar .agents/skills/agent-calendar
-
-# User-level
-mkdir -p ~/.agents/skills
-ln -s /path/to/skills/calendarpipe ~/.agents/skills/calendarpipe
-ln -s /path/to/skills/agent-calendar ~/.agents/skills/agent-calendar
+npx skills add calendarpipe/skills                       # both skills
+npx skills add calendarpipe/skills --skill calendarpipe  # just the API skill
+npx skills add calendarpipe/skills -g                    # all projects
 ```
 
-### Setup
+Update later with `npx skills update`.
 
-After installing, the `calendarpipe` skill will walk you through first-time setup (API key, calendar selection) on first use. It stores credentials in `config.json` inside the skill directory — this file is gitignored and never committed.
+## Setup
 
-`agent-calendar` uses the `calendarpipe` skill for API access and config, so it requires `calendarpipe` to be installed alongside it. `calendarpipe` works standalone.
+On first use the `calendarpipe` skill walks you through getting an API key and choosing a
+hosted calendar, storing both under `~/.config/calendarpipe/` — outside the skill directory,
+so updating or reinstalling never disturbs them. Upgrading from v1.x needs nothing from you:
+both skills move their old config across on first run.
+
+Full setup and installation guide: **https://docs.calendarpipe.com/developers/skills**
+
+## Requirements
+
+- A CalendarPipe **Pro** API key — create one at
+  [calendarpipe.com](https://www.calendarpipe.com) under Settings → API Keys.
+- `curl`, and `jq` for reading the API spec.
+- `bats-core` only if you want to run the test suite.
+
+## Tests
+
+```bash
+cd calendarpipe/tests
+./run.sh                # unit tests against a mocked curl
+./run.sh --integration  # also hits the real API; needs $CALENDARPIPE_API_KEY
+```
+
+## Documentation
+
+- [Agent Skills guide](https://docs.calendarpipe.com/developers/skills)
+- [API reference](https://www.calendarpipe.com/api/v1/openapi.json)
+
+## License
+
+MIT — see [LICENSE](LICENSE).

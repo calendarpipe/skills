@@ -1,9 +1,7 @@
-# Sensitive config (API keys, tokens)
+# Credentials and state now live in ~/.config/calendarpipe/, but keep these
+# ignored so a stale file from an older install can never be committed.
 config.json
+state.json
 .env
 
-# Runtime state
-state.json
-
-# macOS
 .DS_Store

@@ -77,8 +77,8 @@ If no config exists, walk the user through it:
    Always set `organizerDisplayName` — it is what attendees see instead of the raw
    `cal-*@in.calendarpipe.com` address.
 4. **Save** `id` as `calendar_id` and `feedToken` as `feed_token`, then tell the user their
-   calendar email `cal-<feed_token>@in.calendarpipe.com` and feed URL
-   `https://www.calendarpipe.com/feed/<feed_token>`.
+   calendar email — the response's `calendarEmail`, which is not derived from `feedToken` —
+   and feed URL `https://www.calendarpipe.com/feed/<feed_token>`.
 
 Authentication resolves `$CALENDARPIPE_API_KEY` first, then `api_token` from the config file.
 
@@ -91,7 +91,7 @@ Some things cannot be done through the API. **Stop and ask** when you hit:
 | No API key                         | calendarpipe.com → Settings → API Keys, then share it |
 | `402 Payment Required`             | Upgrade to Pro at Settings → Billing                  |
 | Need Google/Microsoft/Apple events | Connect the account at Connections                    |
-| `feedToken` was regenerated        | The old calendar email is dead — get the new one      |
+| `feedToken` was regenerated        | Share the new feed URL; `calendarEmail` is unchanged  |
 | Webhook URL unreachable            | A public HTTPS endpoint must exist before registering |
 
 Never try to create API keys, manage billing, or connect OAuth providers yourself.

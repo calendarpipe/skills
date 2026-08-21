@@ -153,7 +153,7 @@ calendars, plus ICS connections.
 $CP POST /sync-rules '{
   "name": "Work → Personal",
   "source": "hosted:5e6ea455-...",
-  "target": "acc-uuid:primary",
+  "target": "acc-uuid:you@example.com",
   "enabled": true
 }'
 ```

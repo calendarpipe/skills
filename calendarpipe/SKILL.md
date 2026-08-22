@@ -86,13 +86,14 @@ Authentication resolves `$CALENDARPIPE_API_KEY` first, then `api_token` from the
 
 Some things cannot be done through the API. **Stop and ask** when you hit:
 
-| Situation                          | What the human must do                                |
-| ---------------------------------- | ----------------------------------------------------- |
-| No API key                         | calendarpipe.com → Settings → API Keys, then share it |
-| `402 Payment Required`             | Upgrade to Pro at Settings → Billing                  |
-| Need Google/Microsoft/Apple events | Connect the account at Connections                    |
-| `feedToken` was regenerated        | Share the new feed URL; `calendarEmail` is unchanged  |
-| Webhook URL unreachable            | A public HTTPS endpoint must exist before registering |
+| Situation                          | What the human must do                                                                    |
+| ---------------------------------- | ----------------------------------------------------------------------------------------- |
+| No API key                         | calendarpipe.com → Settings → API Keys, then share it                                     |
+| `403 insufficient_scope`           | Re-issue the key with the scope in `details.required_scope`; scopes are fixed at creation |
+| `402 Payment Required`             | Upgrade to Pro at Settings → Billing                                                      |
+| Need Google/Microsoft/Apple events | Connect the account at Connections                                                        |
+| `feedToken` was regenerated        | Share the new feed URL; `calendarEmail` is unchanged                                      |
+| Webhook URL unreachable            | A public HTTPS endpoint must exist before registering                                     |
 
 Never try to create API keys, manage billing, or connect OAuth providers yourself.
 
@@ -224,13 +225,14 @@ background.
 
 ## Errors
 
-| Code  | Meaning                                        |
-| ----- | ---------------------------------------------- |
-| `400` | Validation failed — read `details` in the body |
-| `401` | Missing or invalid API key                     |
-| `402` | Pro plan required — a human must upgrade       |
-| `404` | Not found, or not owned by this key            |
-| `502` | Upstream provider error                        |
+| Code  | Meaning                                                   |
+| ----- | --------------------------------------------------------- |
+| `400` | Validation failed — read `details` in the body            |
+| `401` | Missing or invalid API key                                |
+| `402` | Pro plan required — a human must upgrade                  |
+| `403` | The key lacks a scope — `details.required_scope` names it |
+| `404` | Not found, or not owned by this key                       |
+| `502` | Upstream provider error                                   |
 
 The wrapper prints the response body and exits non-zero on any of these, so the `details`
 array is always available to correct the request.

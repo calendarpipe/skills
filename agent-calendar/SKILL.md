@@ -42,6 +42,11 @@ Before doing any work, check whether `~/.config/calendarpipe/agent-calendar/conf
    }
    ```
 
+This skill only ever lists invitations and responds to them, so the CalendarPipe API key it
+uses needs just two scopes: `invitations:read` and `invitations:write`. If the user is
+creating a key for this skill, tell them to clear the rest — a key that can also delete
+hosted calendars or rotate their feed tokens is a worse thing to leave on disk.
+
 `cron_model` and `cron_session` have sensible defaults (`sonnet`, `isolated`) — only surface them if the user asks. They control which model runs the scheduled task and whether it runs in an isolated session.
 
 At the start of every invocation (after setup), load `config.json` and use `trusted_senders`, `timezone`, `cron_model`, and `cron_session` from it. Never hardcode these values.

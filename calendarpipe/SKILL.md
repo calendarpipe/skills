@@ -225,14 +225,21 @@ background.
 
 ## Errors
 
-| Code  | Meaning                                                   |
-| ----- | --------------------------------------------------------- |
-| `400` | Validation failed — read `details` in the body            |
-| `401` | Missing or invalid API key                                |
-| `402` | Pro plan required — a human must upgrade                  |
-| `403` | The key lacks a scope — `details.required_scope` names it |
-| `404` | Not found, or not owned by this key                       |
-| `502` | Upstream provider error                                   |
+Every error body carries `error`, `code`, `message` and sometimes `details`. **Branch on
+`code`** — `message` is prose and is free to change.
 
-The wrapper prints the response body and exits non-zero on any of these, so the `details`
-array is always available to correct the request.
+| `code`               | Status | Meaning                                                   |
+| -------------------- | ------ | --------------------------------------------------------- |
+| `validation_failed`  | `400`  | A field was rejected — `details` names which              |
+| `bad_request`        | `400`  | Understood, but not actionable as written                 |
+| `unauthorized`       | `401`  | Missing or invalid API key                                |
+| `api_access_blocked` | `402`  | Pro plan required — a human must upgrade                  |
+| `insufficient_scope` | `403`  | The key lacks a scope — `details.required_scope` names it |
+| `not_found`          | `404`  | Not found, or not owned by this key                       |
+| `rate_limited`       | `429`  | Too many requests — back off and retry                    |
+| `internal_error`     | `500`  | Failed inside CalendarPipe — safe to retry                |
+| `upstream_error`     | `502`  | The calendar provider failed — usually transient          |
+
+Treat an unfamiliar `code` as a generic failure of its HTTP status; the list is additive.
+The wrapper prints the response body and exits non-zero on any of these, so `details` is
+always available to correct the request.

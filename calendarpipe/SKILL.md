@@ -192,8 +192,9 @@ Returning the event object itself does nothing — a common mistake.
 nothing else. Times and attendees cannot be rewritten.
 
 `event` carries `title`, `description`, `location`, `start`/`end`, `isAllDay`, `status`,
-`responseStatus`, `showAs`, `type`, `attendees`, `organizer`, `recurrence`, plus the derived
-`durationMinutes`, `dayOfWeek`, `hour`, `isWeekday`, `attendeeCount`, and
+`responseStatus`, `showAs`, `type`, `attendees`, `organizer`, `recurringEventId` (the
+series id when the event is one occurrence of a recurring series, else `null`), plus the
+derived `durationMinutes`, `dayOfWeek`, `hour`, `isWeekday`, `attendeeCount`, and
 `event.matches(pattern)` for case-insensitive text matching.
 
 **Test a gate before saving it.** The dry run executes the code against real events from the

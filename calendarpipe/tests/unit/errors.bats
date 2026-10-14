@@ -22,12 +22,12 @@ load ../test_helper
   [[ "$output" == *"HTTP 400"* ]]
 }
 
-@test "a 402 explains that upgrading is a human action" {
-  export MOCK_CURL_RESPONSE='{"error":"Pro plan required"}
+@test "a 402 points at the code and leaves the decision to a human" {
+  export MOCK_CURL_RESPONSE='{"error":"Payment Required","code":"plan_limit_reached"}
 402'
-  run "$SCRIPT" GET /sync-rules
+  run "$SCRIPT" POST /sync-rules '{}'
   [ "$status" -eq 1 ]
-  [[ "$output" == *"Pro plan required"* ]]
+  [[ "$output" == *"plan_limit_reached"* ]]
   [[ "$output" == *"human"* ]]
 }
 

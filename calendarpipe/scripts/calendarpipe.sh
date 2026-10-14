@@ -200,7 +200,7 @@ if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
   case "$status" in
     3??) echo "calendarpipe: HTTP ${status} — unexpected redirect. Check \$CALENDARPIPE_BASE_URL." >&2 ;;
     401) echo "calendarpipe: 401 — API key missing or invalid." >&2 ;;
-    402) echo "calendarpipe: 402 — Pro plan required. The human must upgrade in the dashboard." >&2 ;;
+    402) echo "calendarpipe: 402 — the plan does not cover this; see \"code\" above. Upgrading or freeing a plan limit is a human decision." >&2 ;;
     404) echo "calendarpipe: 404 — not found, or not owned by this API key." >&2 ;;
     *) echo "calendarpipe: HTTP ${status}" >&2 ;;
   esac

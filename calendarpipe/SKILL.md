@@ -90,7 +90,9 @@ Some things cannot be done through the API. **Stop and ask** when you hit:
 | ---------------------------------- | ----------------------------------------------------------------------------------------- |
 | No API key                         | calendarpipe.com → Settings → API Keys, then share it                                     |
 | `403 insufficient_scope`           | Re-issue the key with the scope in `details.required_scope`; scopes are fixed at creation |
-| `402 Payment Required`             | Upgrade to Pro at Settings → Billing                                                      |
+| `402 api_access_blocked`           | Upgrade to Pro at Settings → Billing                                                      |
+| `402 feature_not_in_plan`          | Upgrade at Settings → Billing to get the feature in `details.feature`                     |
+| `402 plan_limit_reached`           | Upgrade, or agree on which rule to disable to free a slot                                 |
 | Need Google/Microsoft/Apple events | Connect the account at Connections                                                        |
 | `feedToken` was regenerated        | Share the new feed URL; `calendarEmail` is unchanged                                      |
 | Webhook URL unreachable            | A public HTTPS endpoint must exist before registering                                     |
@@ -229,17 +231,19 @@ background.
 Every error body carries `error`, `code`, `message` and sometimes `details`. **Branch on
 `code`** — `message` is prose and is free to change.
 
-| `code`               | Status | Meaning                                                   |
-| -------------------- | ------ | --------------------------------------------------------- |
-| `validation_failed`  | `400`  | A field was rejected — `details` names which              |
-| `bad_request`        | `400`  | Understood, but not actionable as written                 |
-| `unauthorized`       | `401`  | Missing or invalid API key                                |
-| `api_access_blocked` | `402`  | Pro plan required — a human must upgrade                  |
-| `insufficient_scope` | `403`  | The key lacks a scope — `details.required_scope` names it |
-| `not_found`          | `404`  | Not found, or not owned by this key                       |
-| `rate_limited`       | `429`  | Too many requests — back off and retry                    |
-| `internal_error`     | `500`  | Failed inside CalendarPipe — safe to retry                |
-| `upstream_error`     | `502`  | The calendar provider failed — usually transient          |
+| `code`                | Status | Meaning                                                      |
+| --------------------- | ------ | ------------------------------------------------------------ |
+| `validation_failed`   | `400`  | A field was rejected — `details` names which                 |
+| `bad_request`         | `400`  | Understood, but not actionable as written                    |
+| `unauthorized`        | `401`  | Missing or invalid API key                                   |
+| `api_access_blocked`  | `402`  | Pro plan required — a human must upgrade                     |
+| `plan_limit_reached`  | `402`  | Plan limit reached — `details.limit`; free a slot or upgrade |
+| `feature_not_in_plan` | `402`  | The plan lacks `details.feature` — a human must upgrade      |
+| `insufficient_scope`  | `403`  | The key lacks a scope — `details.required_scope` names it    |
+| `not_found`           | `404`  | Not found, or not owned by this key                          |
+| `rate_limited`        | `429`  | Too many requests — back off and retry                       |
+| `internal_error`      | `500`  | Failed inside CalendarPipe — safe to retry                   |
+| `upstream_error`      | `502`  | The calendar provider failed — usually transient             |
 
 Treat an unfamiliar `code` as a generic failure of its HTTP status; the list is additive.
 The wrapper prints the response body and exits non-zero on any of these, so `details` is

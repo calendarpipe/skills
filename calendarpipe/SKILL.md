@@ -162,16 +162,16 @@ $CP POST /sync-rules '{
 ```
 
 `name`, `source` and `target` are required; `code` and `enabled` are optional. Omitting
-`code` uses the default gate, which copies events unchanged.
+`code` uses the default rule, which copies events unchanged.
 
-### Writing a gate function
+### Writing a rule function
 
-The gate is called once per event as a global `gate(event)` — **not exported, and it does not
+The rule is called once per event as a global `rule(event)` — **not exported, and it does not
 return a modified event.** It returns whether the event syncs, and optionally how to change it
-on the way:
+on the way. Legacy `function gate(event)` still works.
 
 ```js
-function gate(event) {
+function rule(event) {
   if (event.durationMinutes < 30) {
     return { pass: false, reason: 'Meeting too short' };
   }
@@ -199,12 +199,12 @@ series id when the event is one occurrence of a recurring series, else `null`), 
 derived `durationMinutes`, `dayOfWeek`, `hour`, `isWeekday`, `attendeeCount`, and
 `event.matches(pattern)` for case-insensitive text matching.
 
-**Test a gate before saving it.** The dry run executes the code against real events from the
+**Test a rule before saving it.** The dry run executes the code against real events from the
 source and returns what each event became:
 
 ```bash
 $CP POST /sync-rules/dry-run '{
-  "code": "function gate(event) {\n  return { pass: true, transform: { title: \"Busy\", showAs: \"free\" } };\n}",
+  "code": "function rule(event) {\n  return { pass: true, transform: { title: \"Busy\", showAs: \"free\" } };\n}",
   "source": "hosted:5e6ea455-...",
   "limit": 5
 }'

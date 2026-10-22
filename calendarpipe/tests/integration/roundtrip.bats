@@ -96,7 +96,7 @@ json_field() {
   [ -n "$cal_uuid" ]
 
   run "$SCRIPT" POST /sync-rules/dry-run \
-    "{\"code\":\"function gate(event) { return { pass: true, transform: { title: 'Busy' } }; }\",\"source\":\"hosted:${cal_uuid}\",\"limit\":3}"
+    "{\"code\":\"function rule(event) { return { pass: true, transform: { title: 'Busy' } }; }\",\"source\":\"hosted:${cal_uuid}\",\"limit\":3}"
   [ "$status" -eq 0 ]
   # A brand-new calendar has no events, so this must report the sample fallback
   # rather than silently claiming a clean run against real data.

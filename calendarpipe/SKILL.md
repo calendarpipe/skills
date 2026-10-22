@@ -17,8 +17,8 @@ things:
 
 - **Hosted calendars** — cloud calendars you fully own. Each has its own email address so
   people can invite it, an `.ics` feed to subscribe to, and full API control.
-- **Sync rules** — one calendar copied into another through a _gate function_, JavaScript
-  that filters and rewrites each event on the way.
+- **Sync rules** (shown as **Pipes** in the dashboard) — one calendar copied into another
+  through a _gate function_, JavaScript that filters and rewrites each event on the way.
 
 If the user asks you to edit events on a connected Google, Microsoft or Apple calendar,
 **confirm with them before writing** — those are their real calendars.

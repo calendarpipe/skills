@@ -211,7 +211,10 @@ $CP POST /sync-rules/dry-run '{
 ```
 
 Each result carries `input`, `output`, `passed`, `transformed` and any `errors`, so you can
-show the user exactly what would land on the target before creating the rule.
+show the user exactly what would land on the target before creating the rule. A result with
+`skipReason` set is an event CalendarPipe wrote itself, which sync never copies back; the code
+did not run on it. With `ruleId`, `hasTargetCopy: true` on a blocked result means saving this
+code deletes an event already on the target — tell the user before you save it.
 
 Pass `ruleId` instead of `source` to test against an existing rule. `limit` caps how many
 events come back; the spec carries its default and maximum. Check `eventsSource` in the

@@ -197,7 +197,10 @@ nothing else. Times and attendees cannot be rewritten.
 `responseStatus`, `showAs`, `type`, `attendees`, `organizer`, `recurringEventId` (the
 series id when the event is one occurrence of a recurring series, else `null`), plus the
 derived `durationMinutes`, `dayOfWeek`, `hour`, `isWeekday`, `attendeeCount`, and
-`event.matches(pattern)` for case-insensitive text matching.
+`event.matches(pattern)` for case-insensitive text matching. `dayOfWeek`, `hour` and
+`isWeekday` are in UTC; for a local day use `event.isOnDays({ days: ['sat', 'sun'],
+timeZone: 'Europe/Prague' })`, for a local time `event.overlapsTimeOfDay({ from: '18:00',
+timeZone: 'Europe/Prague' })`.
 
 **Test a rule before saving it.** The dry run executes the code against real events from the
 source and returns what each event became:
@@ -211,10 +214,15 @@ $CP POST /sync-rules/dry-run '{
 ```
 
 Each result carries `input`, `output`, `passed`, `transformed` and any `errors`, so you can
-show the user exactly what would land on the target before creating the rule. A result with
-`skipReason` set is an event CalendarPipe wrote itself, which sync never copies back; the code
-did not run on it. With `ruleId`, `hasTargetCopy: true` on a blocked result means saving this
-code deletes an event already on the target — tell the user before you save it.
+show the user exactly what would land on the target before creating the rule. Events come from
+the window a sync covers, with each recurring series shown once before any repeats. A result
+with `skipReason` set is one sync never copies, so the code did not run on it:
+`created_by_calendarpipe` (CalendarPipe wrote it) or `no_timezone` (a timed event sync cannot
+place). With `ruleId`, `hasTargetCopy: true` on a blocked result or a `no_timezone` skip means
+the copy already on the target gets deleted — tell the user before you save; when
+`deliveryMode` is `invitation`, that deletion cancels the invitation. A result with
+`errorKind: "transient"` timed out or could not run, so sync leaves its copy as it is. `output`
+is the copy as the target stores it, including the rule's default `color` on a Google target.
 
 Pass `ruleId` instead of `source` to test against an existing rule. `limit` caps how many
 events come back; the spec carries its default and maximum. Check `eventsSource` in the

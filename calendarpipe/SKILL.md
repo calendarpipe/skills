@@ -20,7 +20,7 @@ things:
 - **Sync rules** (shown as **Pipes** in the dashboard) — one calendar copied into another
   through a _gate function_, JavaScript that filters and rewrites each event on the way.
 
-If the user asks you to edit events on a connected Google, Microsoft or Apple calendar,
+If the user asks you to edit events on a connected Google, Microsoft, Apple or CalDAV calendar,
 **confirm with them before writing** — those are their real calendars.
 
 ## Making requests
@@ -86,16 +86,16 @@ Authentication resolves `$CALENDARPIPE_API_KEY` first, then `api_token` from the
 
 Some things cannot be done through the API. **Stop and ask** when you hit:
 
-| Situation                          | What the human must do                                                                    |
-| ---------------------------------- | ----------------------------------------------------------------------------------------- |
-| No API key                         | calendarpipe.com → Settings → API Keys, then share it                                     |
-| `403 insufficient_scope`           | Re-issue the key with the scope in `details.required_scope`; scopes are fixed at creation |
-| `402 api_access_blocked`           | Upgrade to Pro at Settings → Billing                                                      |
-| `402 feature_not_in_plan`          | Upgrade at Settings → Billing to get the feature in `details.feature`                     |
-| `402 plan_limit_reached`           | Upgrade, or agree on which rule to disable to free a slot                                 |
-| Need Google/Microsoft/Apple events | Connect the account at Connections                                                        |
-| `feedToken` was regenerated        | Share the new feed URL; `calendarEmail` is unchanged                                      |
-| Webhook URL unreachable            | A public HTTPS endpoint must exist before registering                                     |
+| Situation                                 | What the human must do                                                                    |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------- |
+| No API key                                | calendarpipe.com → Settings → API Keys, then share it                                     |
+| `403 insufficient_scope`                  | Re-issue the key with the scope in `details.required_scope`; scopes are fixed at creation |
+| `402 api_access_blocked`                  | Upgrade to Pro at Settings → Billing                                                      |
+| `402 feature_not_in_plan`                 | Upgrade at Settings → Billing to get the feature in `details.feature`                     |
+| `402 plan_limit_reached`                  | Upgrade, or agree on which rule to disable to free a slot                                 |
+| Need Google/Microsoft/Apple/CalDAV events | Connect the account at Connections                                                        |
+| `feedToken` was regenerated               | Share the new feed URL; `calendarEmail` is unchanged                                      |
+| Webhook URL unreachable                   | A public HTTPS endpoint must exist before registering                                     |
 
 Never try to create API keys, manage billing, or connect OAuth providers yourself.
 
@@ -142,12 +142,12 @@ out, or event details stripped before they are shared.
 
 **Calendar references** name each side:
 
-| Reference                            | Meaning                                     | Side        |
-| ------------------------------------ | ------------------------------------------- | ----------- |
-| `<accountUUID>:<providerCalendarId>` | A connected Google/Microsoft/Apple calendar | either      |
-| `hosted:<uuid>`                      | A CalendarPipe hosted calendar              | either      |
-| `ics:<uuid>`                         | A subscribed ICS feed                       | source only |
-| `invitation:<email>`                 | Deliver as email invitations (Pro)          | target only |
+| Reference                            | Meaning                                            | Side        |
+| ------------------------------------ | -------------------------------------------------- | ----------- |
+| `<accountUUID>:<providerCalendarId>` | A connected Google/Microsoft/Apple/CalDAV calendar | either      |
+| `hosted:<uuid>`                      | A CalendarPipe hosted calendar                     | either      |
+| `ics:<uuid>`                         | A subscribed ICS feed                              | source only |
+| `invitation:<email>`                 | Deliver as email invitations (Pro)                 | target only |
 
 Get valid references from `$CP GET /calendars`, which lists every connected account with its
 calendars, plus ICS connections.

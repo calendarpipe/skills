@@ -168,7 +168,7 @@ $CP POST /sync-rules '{
 
 The rule is called once per event as a global `rule(event)` — **not exported, and it does not
 return a modified event.** It returns whether the event syncs, and optionally how to change it
-on the way. Legacy `function gate(event)` still works.
+on the way. Write `rule`; older rules may define `function gate(event)`, which still works.
 
 ```js
 function rule(event) {
@@ -182,25 +182,30 @@ function rule(event) {
 `return true` / `return false` are shorthand for `{ pass: true }` / `{ pass: false }`.
 Returning the event object itself does nothing — a common mistake.
 
-|             |                                                                  |
-| ----------- | ---------------------------------------------------------------- |
-| `pass`      | required; `false` blocks the event                               |
-| `reason`    | why it was blocked, ≤200 chars, only read when `pass` is `false` |
-| `transform` | only read when `pass` is `true`                                  |
+|             |                                                          |
+| ----------- | -------------------------------------------------------- |
+| `pass`      | required; `false` blocks the event                       |
+| `reason`    | why, ≤200 chars, shown in test results for both outcomes |
+| `transform` | only read when `pass` is `true`                          |
 
 `transform` accepts `title`, `description`, `location`, `visibility`
 (`default`/`public`/`private`), `showAs` (`free`/`busy`), `type`
-(`default`/`outOfOffice`), `autoDecline`, `preBufferMinutes`, `postBufferMinutes` — and
-nothing else. Times and attendees cannot be rewritten.
+(`default`/`outOfOffice`), `autoDecline`, `preBufferMinutes`, `postBufferMinutes`,
+`reminders` (`false` or minutes before), `color` (a Google event colour name) — and nothing
+else. Times and attendees cannot be rewritten. `location: null` and `description: null`
+clear the field; `title` can't be cleared.
 
 `event` carries `title`, `description`, `location`, `start`/`end`, `isAllDay`, `status`,
-`responseStatus`, `showAs`, `type`, `attendees`, `organizer`, `recurringEventId` (the
-series id when the event is one occurrence of a recurring series, else `null`), plus the
-derived `durationMinutes`, `dayOfWeek`, `hour`, `isWeekday`, `attendeeCount`, and
-`event.matches(pattern)` for case-insensitive text matching. `dayOfWeek`, `hour` and
-`isWeekday` are in UTC; for a local day use `event.isOnDays({ days: ['sat', 'sun'],
-timeZone: 'Europe/Prague' })`, for a local time `event.overlapsTimeOfDay({ from: '18:00',
-timeZone: 'Europe/Prague' })`.
+`responseStatus`, `visibility`, `showAs`, `type`, `attendees` (each with `email` and, when
+known, `response`), `organizer`, `recurringEventId` (the series id when the event is one
+occurrence of a recurring series, else `null`), plus `durationMinutes` and `attendeeCount`.
+Helpers: `event.matches(pattern)` searches title and description, `event.hasAttendee(pattern)`
+attendee emails — a string is a case-insensitive substring, or pass a RegExp;
+`event.hasAttendeeDomain('example.com')` is an exact domain match. For local time, pass an
+IANA zone: `event.localStart('Europe/Prague')` gives `{ date, weekday, time, hour, minute }`,
+`event.isOnDays({ days: ['sat', 'sun'], timeZone: 'Europe/Prague' })` a day check,
+`event.overlapsTimeOfDay({ from: '18:00', timeZone: 'Europe/Prague' })` a time window. Don't
+use `event.hour`, `dayOfWeek` or `isWeekday`: they are deprecated and in UTC.
 
 **Test a rule before saving it.** The dry run executes the code against real events from the
 source and returns what each event became:
@@ -214,10 +219,13 @@ $CP POST /sync-rules/dry-run '{
 ```
 
 Each result carries `input`, `output`, `passed`, `transformed` and any `errors`, so you can
-show the user exactly what would land on the target before creating the rule. Events come from
-the window a sync covers, with each recurring series shown once before any repeats. A result
-with `skipReason` set is one sync never copies, so the code did not run on it:
-`created_by_calendarpipe` (CalendarPipe wrote it) or `no_timezone` (a timed event sync cannot
+show the user exactly what would land on the target before creating the rule. Top-level
+`warnings` (`{ code, message }`) flags code that runs but likely isn't what was meant — a
+UTC property, a misspelt result key, a transform the target ignores; fix them before saving,
+though they never block a save. `modernizedCode`, when not null, is the same code with
+the old `gate`/`Gate*` names renamed; save it instead. Events come from the window a sync covers, with each
+recurring series shown once before any repeats. A result with `skipReason` set is one sync
+never copies, so the code did not run on it: `created_by_calendarpipe` (CalendarPipe wrote it) or `no_timezone` (a timed event sync cannot
 place). With `ruleId`, `hasTargetCopy: true` on a blocked result or a `no_timezone` skip means
 the copy already on the target gets deleted — tell the user before you save; when
 `deliveryMode` is `invitation`, that deletion cancels the invitation. A result with
